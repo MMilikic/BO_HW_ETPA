@@ -126,7 +126,48 @@ def match(
     #
     # For the extension, implement `_is_completely_fillable` first; the docstring's
     # paragraph on FOK says what `match` does with its answer.
-    raise NotImplementedError("L1: match is yours to write")
+    events = []
+    remaining_e1 = incoming.remaining_e1
+    while remaining_e1 > 0:
+        print("Get best order on the other side of the book")
+        best_order = book.get_best_order(_opposite(incoming.side))
+        if best_order is None or not _would_cross(incoming, best_order.price_e2):
+            print("No best order, so nothing to cross with")
+            break
+        trade_quantity = min(best_order.remaining_e1, remaining_e1)
+        remaining_e1 -= trade_quantity
+        book.fill(best_order.exchange_order_id, quantity_e1=trade_quantity)
+        if trade_quantity == best_order.remaining_e1:
+            print("Best order is completely filled, so remove it from the book")
+            book.remove(best_order.exchange_order_id)
+        trade_id = take_trade_id()
+        tradeEvent = _make_trade_event(
+            incoming,
+            best_order,
+            trade_id=trade_id,
+            price_e2=best_order.price_e2,
+            quantity_e1=trade_quantity,
+            maker_remaining_e1=best_order.remaining_e1 - trade_quantity,
+            taker_remaining_e1=remaining_e1 - trade_quantity,
+        )
+        events.append(tradeEvent)
+    if incoming.order_type == OrderType.LIMIT:
+        print("Incoming order is a limit order")
+        print("Make resting order from incoming")
+        resting_order = _make_resting_order(incoming, remaining_e1=remaining_e1)
+        book.add(resting_order)
+        print(book.render_state())
+        queue_ahead = book.get_queue_ahead_quantity_e1(incoming.exchange_order_id)
+        order_resting = _make_order_rested_event(
+            incoming,
+            remaining_e1=remaining_e1,
+            queue_ahead_quantity_e1=queue_ahead,
+        )
+        events.append(order_resting)
+        return events
+    print(f"Best order is: {best_order}")
+    print("Call to _would_cross for sanity check")
+    # raise NotImplementedError("L1: match is yours to write")
 
 
 def cancel(
@@ -187,8 +228,13 @@ def _opposite(side: Side) -> Side:
 def _would_cross(incoming: IncomingOrder, resting_price_e2: Price) -> bool:
     """Whether `incoming` would trade with a resting order at `resting_price_e2`: a buy
     pays at most its price, a sell receives at least its price."""
-    # TODO L1: implement this function
-    raise NotImplementedError("L1: _would_cross is yours to write")
+    print(f"incoming order is: {incoming}")
+    print(f"resting price is: {resting_price_e2}")
+    if incoming.side == Side.BUY:
+        return resting_price_e2 <= incoming.price_e2
+
+    elif incoming.side == Side.SELL:
+        return resting_price_e2 >= incoming.price_e2
 
 
 def _remainder_cancel_reason_code(incoming: IncomingOrder, book: Book) -> ReasonCode:
