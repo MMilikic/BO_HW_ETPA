@@ -1,0 +1,4 @@
+# Git, leave every file's line endings as they are, whatever it is set to do on this
+# machine. The commands in bin/ run inside a Linux container, and one that git has
+# rewritten with Windows line endings does not start there.
+* -text

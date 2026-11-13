@@ -1,0 +1,6 @@
+{
+  "id": "intellij-python-sdk",
+  "version": "1.1.0",
+  "name": "IntelliJ's Python SDK",
+  "description": "Gives IntelliJ IDEA, 2026.1 to 2027.3, the Python SDK the project's .idea/ names, homework-exchange, before IntelliJ first starts."
+}

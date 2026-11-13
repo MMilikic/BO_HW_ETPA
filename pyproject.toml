@@ -1,0 +1,91 @@
+[project]
+name = "homework-exchange"
+version = "0.1.0"
+description = "A deliberately simplified exchange, built to be read."
+# Pinned to one minor version. The Dockerfile and .python-version say 3.14 too, and
+# tests/test_version_pin.py checks that all three agree.
+requires-python = ">=3.14,<3.15"
+# Runtime code uses the standard library only. This stays empty.
+dependencies = []
+
+[dependency-groups]
+# Development tools. Exact versions are pinned in uv.lock; these are the bounds.
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.16,<0.17",
+    "mypy>=2.3,<3",
+    # Not for the code: IntelliJ lists an interpreter's packages with pip.
+    "pip>=26.2,<27",
+    # Not for the code: the course's maintainers run their own tests several at a time
+    # with it.
+    "pytest-xdist>=3.8,<4",
+]
+
+[tool.uv]
+# Nothing is ever installed: tests find the code through pytest's pythonpath below.
+package = false
+
+[tool.pytest.ini_options]
+# src for the code; tests, so that the shared test helpers import by name:
+# from helpers.participants import A.
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
+# Full assertion diffs, never truncated. A failure about a book shows the whole
+# ladder: students have no CI, and "use -vv to see more" is a flag they won't know.
+verbosity_assertions = 2
+# A test file that cannot be collected, say because it imports a student's file that
+# does not import yet, fails on its own: every other test still runs and reports.
+addopts = ["--continue-on-collection-errors"]
+
+[tool.ruff]
+line-length = 88
+# Our own code, for import sorting: tests/ holds the shared helpers, which sort with
+# exchange and protocol rather than with pytest.
+src = ["src", "tests"]
+# The commands in bin/ are Python without a .py extension, so ruff would skip them.
+# bin/activate is shell, sourced rather than run.
+extend-include = ["bin/*"]
+extend-exclude = ["bin/activate"]
+# Excluded even when named: `ruff check bin/*` would otherwise lint the shell as Python.
+force-exclude = true
+
+[tool.ruff.lint]
+# Deliberately not SIM (it rewards clever one-liners) or PLR2004 (magic numbers are
+# everywhere in tests about prices and quantities); not FIX002, which rejects TODO,
+# since the functions you write carry one; not ERA001, which mistakes market-rule
+# comments for dead code.
+select = [
+    "E", "F", "I", "UP", "B",
+    "N", "BLE001", "FIX001", "FIX003", "FIX004", "D100", "TID251", "TID252",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The formatter still holds the tests' code to 88 columns, but never wraps a string, a
+# comment or a docstring, so those may run past it unflagged. One must: an expected
+# ladder's legend, written inside a test class's method, is longer than the line that
+# holds it. The rest is wrapped by hand.
+"tests/**" = ["E501"]
+
+[tool.ruff.lint.pep8-naming]
+# A test class is named for the function its tests are about, as written:
+# Test_would_cross, so that a search for the function finds it.
+ignore-names = ["Test_*"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"collections.defaultdict".msg = "reading a missing key creates it"
+"functools.cache".msg = "hidden state and hidden cost"
+"functools.lru_cache".msg = "hidden state and hidden cost"
+"functools.singledispatch".msg = "dispatch with an isinstance chain instead"
+"typing.Final".msg = "upper case already marks a constant"
+
+[tool.mypy]
+strict = true
+# src for the code; tests, so that the shared test helpers are found by name, as pytest
+# finds them, also when mypy is given a single test file.
+mypy_path = ["src", "tests"]
+# The launchers in bin/ have no .py extension, and mypy would name each of them
+# __main__, so that two in one run clash. This names each after its file.
+scripts_are_modules = true

@@ -1,0 +1,5 @@
+# The image holds the environment only; your code is mounted in when you run it.
+# So the build needs nothing but the dependency list.
+*
+!pyproject.toml
+!uv.lock

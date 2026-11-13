@@ -1,0 +1,75 @@
+// A development container for this project, for IntelliJ IDEA Ultimate or VS Code: the
+// image the project's Dockerfile builds.
+{
+  "name": "homework-exchange",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+
+  // Mounted where the image expects the code, so that its PYTHONPATH, /work/src, and
+  // the launchers in /work/bin apply as they are.
+  "workspaceMount": "source=${localWorkspaceFolder},target=/work,type=bind",
+  "workspaceFolder": "/work",
+
+  // Work as the image's ordinary user, not root, so that files saved from inside the
+  // container stay yours on your machine.
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true,
+
+  // Should an editor ignore the mount above and put the folder elsewhere, this
+  // follows it.
+  "remoteEnv": {
+    "PYTHONPATH": "${containerWorkspaceFolder}/src"
+  },
+
+  // IntelliJ's terminal is a login shell, whose /etc/profile resets PATH so that the
+  // base image's own Python, without pytest, ruff or mypy, comes first. So every shell
+  // puts the launchers and the tools back in front, in the image's order. Not a PATH
+  // entry in remoteEnv: IntelliJ's terminal does not apply one.
+  "postCreateCommand": "echo 'export PATH=\"${containerWorkspaceFolder}/bin:/opt/venv/bin:$PATH\"' >> ~/.bashrc",
+
+  "features": {
+    "./intellij-python-sdk": {}
+  },
+
+  "customizations": {
+    // IntelliJ's Python plugins, by ID: Python, the Python Community Edition it builds
+    // on, and their debugger.
+    "jetbrains": {
+      "plugins": ["Pythonid", "PythonCore", "intellij.python.dap.plugin"]
+    },
+
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        // One way of choosing the interpreter on every machine: Microsoft tries
+        // another on some.
+        "python.useEnvironmentsExtension": false,
+        // Never unittest: it puts tests/ first on the import path, where
+        // tests/exchange hides src/exchange.
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        // The import path the tests run with, in pyproject.toml's order.
+        "python.analysis.extraPaths": ["src", "tests"],
+        // By name: Pylance takes a folder holding bin/activate for a virtualenv and
+        // analyses none of it.
+        "python.analysis.include": ["src", "tests", "conftest.py"],
+        // Nothing activated: the image's PATH already has the tools.
+        "python.terminal.activateEnvironment": false,
+        // The ruff the project locks, which dev_check runs, not the extension's own.
+        "ruff.path": ["/opt/venv/bin/ruff"],
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  }
+}

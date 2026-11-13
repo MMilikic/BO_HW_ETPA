@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Format the code as the checks expect: ruff's formatting, and its sorting of imports.
+Outside the course container, run it as `uv run bin/dev_format`."""
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+# It takes no arguments: --help says what it does, and anything else is refused, rather
+# than ignored while it runs.
+argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+).parse_args()
+
+CODEBASE = Path(__file__).resolve().parent.parent
+
+FORMAT = [sys.executable, "-m", "ruff", "format"]
+SORT_IMPORTS = [sys.executable, "-m", "ruff", "check", "--fix", "--select", "I"]
+
+for command in [FORMAT, SORT_IMPORTS]:
+    completed = subprocess.run(command, cwd=CODEBASE)
+    if completed.returncode != 0:
+        sys.exit(completed.returncode)

@@ -1,0 +1,31 @@
+<application>
+  <component name="ProjectJdkTable">
+    <jdk version="2">
+      <name value="homework-exchange" />
+      <type value="Python SDK" />
+      <homePath value="/opt/venv/bin/python" />
+      <roots>
+        <annotationsPath>
+          <root type="composite" />
+        </annotationsPath>
+        <classPath>
+          <root type="composite">
+            <root url="file:///usr/local/lib/python3.14" type="simple" />
+            <root url="file:///usr/local/lib/python3.14/lib-dynload" type="simple" />
+            <root url="file:///opt/venv/lib/python3.14/site-packages" type="simple" />
+          </root>
+        </classPath>
+        <javadocPath>
+          <root type="composite" />
+        </javadocPath>
+        <sourcePath>
+          <root type="composite" />
+        </sourcePath>
+      </roots>
+      <additional ASSOCIATED_PROJECT_PATH="/work" WORKING_DIRECTORY="/work" SDK_UUID="5d1f7a3e-2c4b-4e8a-9f61-0b7c3d9e8a52">
+        <setting name="FLAVOR_ID" value="VirtualEnvSdkFlavor" />
+        <setting name="FLAVOR_DATA" value="{}" />
+      </additional>
+    </jdk>
+  </component>
+</application>

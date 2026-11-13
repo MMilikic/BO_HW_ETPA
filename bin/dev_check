@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Run every check the code is held to, one after another, even when one fails: ruff,
+the formatting, mypy, and the tests under two hash seeds, since nothing may depend on
+the order of a set. The tests run under the second seed only once they have passed
+under the first. The last line names the checks that failed. The exit status is the
+first failure's, or 0 if every check passed. Outside the course container, run it as
+`uv run bin/dev_check`.
+
+Nothing requires it: it says how the code stands, and passing it is not the homework.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# It takes no arguments: --help says what it does, and anything else is refused, rather
+# than ignored while it runs.
+argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+).parse_args()
+
+CODEBASE = Path(__file__).resolve().parent.parent
+
+PYTHON = sys.executable
+SOURCED_FILE_NAME = "activate"
+PYTHON_COMMANDS = sorted(
+    str(path) for path in (CODEBASE / "bin").iterdir() if path.name != SOURCED_FILE_NAME
+)
+FIRST_HASH_SEED = "0"
+SECOND_HASH_SEED = "1"
+FIRST_SEED_TESTS_CHECK_NAME = f"tests, hash seed {FIRST_HASH_SEED}"
+SECOND_SEED_TESTS_CHECK_NAME = f"tests, hash seed {SECOND_HASH_SEED}"
+
+CHECKS: list[tuple[str, list[str], dict[str, str]]] = [
+    ("ruff", [PYTHON, "-m", "ruff", "check"], {}),
+    ("formatting", [PYTHON, "-m", "ruff", "format", "--check"], {}),
+    (
+        "mypy",
+        [PYTHON, "-m", "mypy", "src", "tests", "conftest.py", *PYTHON_COMMANDS],
+        {},
+    ),
+    (
+        FIRST_SEED_TESTS_CHECK_NAME,
+        [PYTHON, "-m", "pytest", "-q"],
+        {"PYTHONHASHSEED": FIRST_HASH_SEED},
+    ),
+    (
+        SECOND_SEED_TESTS_CHECK_NAME,
+        [PYTHON, "-m", "pytest", "-q"],
+        {"PYTHONHASHSEED": SECOND_HASH_SEED},
+    ),
+]
+
+failed_check_names: list[str] = []
+first_failure_exit_status = 0
+for name, command, environment in CHECKS:
+    if (
+        name == SECOND_SEED_TESTS_CHECK_NAME
+        and FIRST_SEED_TESTS_CHECK_NAME in failed_check_names
+    ):
+        print(
+            f"== {name}: not run, the tests failed under hash seed {FIRST_HASH_SEED}",
+            flush=True,
+        )
+        continue
+    print(f"== {name}", flush=True)
+    completed = subprocess.run(command, cwd=CODEBASE, env=os.environ | environment)
+    if completed.returncode != 0:
+        print(f"== {name} failed", flush=True)
+        if not failed_check_names:
+            first_failure_exit_status = completed.returncode
+        failed_check_names.append(name)
+
+if failed_check_names:
+    print(f"== failed: {'; '.join(failed_check_names)}", flush=True)
+    sys.exit(first_failure_exit_status)
+print("== every check passed", flush=True)

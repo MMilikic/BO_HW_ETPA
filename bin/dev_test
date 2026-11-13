@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Run the tests with pytest, passing on any arguments given, such as
+`dev_test -k resync`. Outside the course container, run it as `uv run bin/dev_test`."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+CODEBASE = Path(__file__).resolve().parent.parent
+
+completed = subprocess.run(
+    [sys.executable, "-m", "pytest", *sys.argv[1:]], cwd=CODEBASE
+)
+sys.exit(completed.returncode)

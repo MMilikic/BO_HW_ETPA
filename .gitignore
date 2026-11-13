@@ -1,0 +1,13 @@
+# Created when you run the tests outside the container.
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# What the venue writes when it runs: its journal and its timings.
+run/
+
+# Editor settings are personal; IntelliJ and VS Code write them into the folder.
+.idea/
+.vscode/

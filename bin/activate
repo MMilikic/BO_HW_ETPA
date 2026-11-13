@@ -1,0 +1,69 @@
+# Source this file, don't run it: `. bin/activate`. It puts this codebase's bin/ first
+# on PATH, and in bash loads tab completion for its programs, for this shell only, as a
+# virtualenv's activate does. `deactivate_exchange` undoes both. In the course
+# container there is nothing to do: bin/ is on PATH already. Source the file itself,
+# not a link to it.
+#
+# It stacks with a virtualenv: a venv for the Python, this for the commands, activated
+# in either order and undone in reverse. Its undo is not called `deactivate`, because a
+# venv's activate calls `deactivate` first thing and would undo this too. It takes only
+# its own entry out of PATH: restoring a PATH saved earlier would bring back a venv
+# deactivated since. If the two are undone out of order, the venv's deactivate restores
+# the PATH it saved, which drops this file's entry or brings it back.
+
+if [ -n "${BASH_VERSION:-}" ]; then
+    if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+        echo "source it rather than running it: . $0" >&2
+        exit 1
+    fi
+    _exchange_activate="${BASH_SOURCE[0]}"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+    _exchange_activate="${(%):-%x}"
+else
+    echo "bin/activate is for bash or zsh" >&2
+    return 1 2>/dev/null || exit 1
+fi
+# With CDPATH set, cd would print the directory it went to.
+_EXCHANGE_BIN="$(CDPATH= cd -- "$(dirname -- "$_exchange_activate")" && pwd)"
+_EXCHANGE_COMPLETIONS="$_EXCHANGE_BIN/../share/bash-completion/completions"
+unset _exchange_activate
+
+# PATH with every copy of the directory $1 taken out. Quoted, $1 is matched as text,
+# not as a pattern. It is a loop because two copies side by side share a colon.
+_exchange_path_without() {
+    local entries=":$PATH:"
+    while [ "${entries#*:"$1":}" != "$entries" ]; do
+        entries="${entries//:"$1":/:}"
+    done
+    entries="${entries#:}"
+    printf '%s' "${entries%:}"
+}
+
+# Sourced again, it moves its entry to the front rather than adding a second.
+PATH="$_EXCHANGE_BIN:$(_exchange_path_without "$_EXCHANGE_BIN")"
+export PATH
+
+# Tab completion is bash's; zsh gets the PATH only.
+if [ -n "${BASH_VERSION:-}" ]; then
+    for _exchange_completion in "$_EXCHANGE_COMPLETIONS"/*; do
+        [ -e "$_exchange_completion" ] || continue
+        . "$_exchange_completion"
+    done
+    unset _exchange_completion
+fi
+
+deactivate_exchange() {
+    PATH="$(_exchange_path_without "$_EXCHANGE_BIN")"
+    export PATH
+    if [ -n "${BASH_VERSION:-}" ]; then
+        local completion command_name
+        for completion in "$_EXCHANGE_COMPLETIONS"/*; do
+            [ -e "$completion" ] || continue
+            command_name="${completion##*/}"
+            complete -r "$command_name" 2>/dev/null
+            unset -f "_$command_name"
+        done
+    fi
+    unset _EXCHANGE_BIN _EXCHANGE_COMPLETIONS
+    unset -f deactivate_exchange _exchange_path_without
+}

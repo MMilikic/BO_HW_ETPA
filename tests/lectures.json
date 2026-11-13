@@ -1,0 +1,11 @@
+{
+  "tests/exchange/engine/extensions/test_fok.py": "L1",
+  "tests/exchange/engine/test_book.py": "L1",
+  "tests/exchange/engine/test_matching.py": "L1",
+  "tests/exchange/test_events.py": "L1",
+  "tests/exchange/test_extensions.py": "L1",
+  "tests/exchange/test_rendering.py": "L1",
+  "tests/system/test_multicast.py": "L1",
+  "tests/test_stdlib_only.py": "L1",
+  "tests/test_version_pin.py": "L1"
+}
