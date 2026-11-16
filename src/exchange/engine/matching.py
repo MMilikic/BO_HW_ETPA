@@ -126,20 +126,26 @@ def match(
     #
     # For the extension, implement `_is_completely_fillable` first; the docstring's
     # paragraph on FOK says what `match` does with its answer.
+    if incoming.order_type == OrderType.FOK and not _is_completely_fillable(
+        incoming, book
+    ):
+        reason_code = ReasonCode.FOK_UNFILLABLE
+        order_cancelled = _make_order_cancelled_in_matching_event(
+            incoming, cancelled_e1=incoming.remaining_e1, reason_code=reason_code
+        )
+        return [order_cancelled]
     events = []
     remaining_e1 = incoming.remaining_e1
     while remaining_e1 > 0:
-        print("Get best order on the other side of the book")
         best_order = book.get_best_order(_opposite(incoming.side))
         if best_order is None or not _would_cross(incoming, best_order.price_e2):
-            print("No best order, so nothing to cross with")
             break
         trade_quantity = min(best_order.remaining_e1, remaining_e1)
         remaining_e1 -= trade_quantity
-        book.fill(best_order.exchange_order_id, quantity_e1=trade_quantity)
         if trade_quantity == best_order.remaining_e1:
-            print("Best order is completely filled, so remove it from the book")
             book.remove(best_order.exchange_order_id)
+        else:
+            book.fill(best_order.exchange_order_id, quantity_e1=trade_quantity)
         trade_id = take_trade_id()
         tradeEvent = _make_trade_event(
             incoming,
@@ -148,25 +154,31 @@ def match(
             price_e2=best_order.price_e2,
             quantity_e1=trade_quantity,
             maker_remaining_e1=best_order.remaining_e1 - trade_quantity,
-            taker_remaining_e1=remaining_e1 - trade_quantity,
+            taker_remaining_e1=remaining_e1,
         )
         events.append(tradeEvent)
-    if incoming.order_type == OrderType.LIMIT:
-        print("Incoming order is a limit order")
-        print("Make resting order from incoming")
-        resting_order = _make_resting_order(incoming, remaining_e1=remaining_e1)
-        book.add(resting_order)
-        print(book.render_state())
-        queue_ahead = book.get_queue_ahead_quantity_e1(incoming.exchange_order_id)
-        order_resting = _make_order_rested_event(
-            incoming,
-            remaining_e1=remaining_e1,
-            queue_ahead_quantity_e1=queue_ahead,
-        )
-        events.append(order_resting)
-        return events
-    print(f"Best order is: {best_order}")
-    print("Call to _would_cross for sanity check")
+
+    if remaining_e1 > 0:
+        if incoming.order_type == OrderType.LIMIT:
+            resting_order = _make_resting_order(incoming, remaining_e1=remaining_e1)
+            book.add(resting_order)
+            print(book.render_state())
+            queue_ahead = book.get_queue_ahead_quantity_e1(incoming.exchange_order_id)
+            order_resting = _make_order_rested_event(
+                incoming,
+                remaining_e1=remaining_e1,
+                queue_ahead_quantity_e1=queue_ahead,
+            )
+            events.append(order_resting)
+            return events
+        else:
+            reason_code = _remainder_cancel_reason_code(incoming, book)
+            order_cancelled = _make_order_cancelled_in_matching_event(
+                incoming, cancelled_e1=remaining_e1, reason_code=reason_code
+            )
+            events.append(order_cancelled)
+            return events
+    return events
     # raise NotImplementedError("L1: match is yours to write")
 
 
@@ -182,7 +194,18 @@ def cancel(
     # TODO L1: implement this function
     # No need to build an event by hand: there are builders at the bottom of this
     # file for all relevant events.
-    raise NotImplementedError("L1: cancel is yours to write")
+    print(f"Cancel order with exchange_order_id: {exchange_order_id}")
+    resting_order = book.get_order(exchange_order_id)
+    if resting_order is None:
+        raise KeyError(
+            f"Order with exchange_order_id {exchange_order_id} not found in book"
+        )
+    canceled_order = _make_order_cancelled_from_book_event(
+        resting_order, reason_code=reason_code, request_id=request_id
+    )
+    book.remove(exchange_order_id)
+    return canceled_order
+    # raise NotImplementedError("L1: cancel is yours to write")
 
 
 def modify(
@@ -218,7 +241,58 @@ def modify(
     # - Write `cancel` and `match` first: `modify` builds on both.
     # - Start with `test_a_modify_that_changes_nothing_keeps_its_queue_position`, an
     #   order that keeps its queue position.
-    raise NotImplementedError("L1: modify is yours to write")
+    print(f"Modify order with exchange_order_id: {incoming_modify.exchange_order_id}")
+    events = []
+    resting_order = book.get_order(incoming_modify.exchange_order_id)
+    if resting_order is None:
+        raise KeyError(
+            f"Order with exchange_order_id {incoming_modify.exchange_order_id} not found in book"
+        )
+    filled_e1 = resting_order.total_e1 - resting_order.remaining_e1
+    new_remaining_e1 = incoming_modify.new_total_e1 - filled_e1
+    if incoming_modify.new_total_e1 <= filled_e1:
+        reason_code = ReasonCode.MODIFY_BELOW_FILLED
+        order_cancelled = cancel(
+            incoming_modify.exchange_order_id,
+            book,
+            request_id=incoming_modify.request_id,
+            reason_code=reason_code,
+        )
+
+        events.append(order_cancelled)
+        return events
+
+    if (
+        incoming_modify.new_price_e2 == resting_order.price_e2
+        and new_remaining_e1 <= resting_order.remaining_e1
+    ):
+        modified_order = _make_order_modified_retaining_priority_event(
+            resting_order,
+            incoming_modify,
+            remaining_e1=new_remaining_e1,
+        )
+        book.amend(
+            incoming_modify.exchange_order_id,
+            total_e1=incoming_modify.new_total_e1,
+            remaining_e1=modified_order.remaining_e1,
+        )
+        events.append(modified_order)
+        return events
+    else:
+        modified_order = _make_order_modified_losing_priority_event(
+            resting_order, incoming_modify
+        )
+        book.remove(incoming_modify.exchange_order_id)
+        events.append(modified_order)
+        incoming_after_modify = _make_incoming_order_after_modify(
+            resting_order,
+            incoming_modify,
+            remaining_e1=new_remaining_e1,
+        )
+        match_events = match(incoming_after_modify, book, take_trade_id)
+        events.extend(match_events)
+        return events
+    # raise NotImplementedError("L1: modify is yours to write")
 
 
 def _opposite(side: Side) -> Side:
@@ -285,7 +359,22 @@ def _is_completely_fillable(incoming: IncomingOrder, book: Book) -> bool:
     # The book's `get_orders_best_first` gives you the resting orders on the other
     # side in price-time priority order, and your `_would_cross` says which of those
     # orders are within its price.
-    raise NotImplementedError("L1: _is_completely_fillable is yours to write")
+    print(
+        f"Checking if incoming order {incoming.exchange_order_id} is completely fillable"
+    )
+    if incoming.remaining_e1 is None:
+        raise ValueError("Incoming order has no remaining quantity to fill")
+    total_fillable_quantity = 0
+    resting_orders = book.get_orders_best_first(_opposite(incoming.side))
+    for order in resting_orders:
+        if not _would_cross(incoming, order.price_e2):
+            break
+        total_fillable_quantity += order.remaining_e1
+        if total_fillable_quantity >= incoming.remaining_e1:
+            print(f"Incoming order {incoming.exchange_order_id} is completely fillable")
+            return True
+
+    return total_fillable_quantity >= incoming.remaining_e1
 
 
 def _make_resting_order(
