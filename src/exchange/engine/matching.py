@@ -196,14 +196,11 @@ def cancel(
     # file for all relevant events.
     print(f"Cancel order with exchange_order_id: {exchange_order_id}")
     resting_order = book.get_order(exchange_order_id)
-    if resting_order is None:
-        raise KeyError(
-            f"Order with exchange_order_id {exchange_order_id} not found in book"
-        )
+    book.remove(exchange_order_id)
     canceled_order = _make_order_cancelled_from_book_event(
         resting_order, reason_code=reason_code, request_id=request_id
     )
-    book.remove(exchange_order_id)
+
     return canceled_order
     # raise NotImplementedError("L1: cancel is yours to write")
 
@@ -244,10 +241,7 @@ def modify(
     print(f"Modify order with exchange_order_id: {incoming_modify.exchange_order_id}")
     events = []
     resting_order = book.get_order(incoming_modify.exchange_order_id)
-    if resting_order is None:
-        raise KeyError(
-            f"Order with exchange_order_id {incoming_modify.exchange_order_id} not found in book"
-        )
+
     filled_e1 = resting_order.total_e1 - resting_order.remaining_e1
     new_remaining_e1 = incoming_modify.new_total_e1 - filled_e1
     if incoming_modify.new_total_e1 <= filled_e1:
@@ -362,8 +356,7 @@ def _is_completely_fillable(incoming: IncomingOrder, book: Book) -> bool:
     print(
         f"Checking if incoming order {incoming.exchange_order_id} is completely fillable"
     )
-    if incoming.remaining_e1 is None:
-        raise ValueError("Incoming order has no remaining quantity to fill")
+
     total_fillable_quantity = 0
     resting_orders = book.get_orders_best_first(_opposite(incoming.side))
     for order in resting_orders:
